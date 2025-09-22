@@ -6,6 +6,7 @@ const authRoutes = require('./src/routes/authRoute');
 const moviesRoutes = require('./src/routes/moviesRoute');
 const userMoviesRoutes = require('./src/routes/userMoviesRoute');
 const recommendationRoutes = require('./src/routes/recommendationRoute');
+require('./src/config/passport');
 
 const app = express();
 
@@ -13,6 +14,7 @@ connectDB();
 
 app.use(cors());
 app.use(express.json());
+app.use(passport.initialize());
 
 
 app.use('/api/auth', authRoutes);
