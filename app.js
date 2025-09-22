@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const passport = require('passport');
 const connectDB = require('./src/config/database');
 
 const authRoutes = require('./src/routes/authRoute');
