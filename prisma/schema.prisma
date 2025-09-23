@@ -13,7 +13,7 @@ model User {
   name     String
   email    String      @unique
   password String
-  googleId String     @unique
+  googleId String?     @unique
   movies   UserMovie[]
 }
 
