@@ -24,6 +24,23 @@ const loginRules = () => {
     ];
 };
 
+const changePasswordRules = () => {
+    return [
+        body('currentPassword')
+            .notEmpty()
+            .withMessage('A senha atual é obrigatória.'),
+        body('newPassword')
+            .isLength({ min: 6 })
+            .withMessage('A nova senha deve ter no mínimo 6 caracteres.')
+            .custom((value, { req }) => {
+                if (value === req.body.currentPassword) {
+                    throw new Error('A nova senha deve ser diferente da senha atual.');
+                }
+                return true;
+            }),
+    ];
+};
+
 const validate = (req, res, next) => {
     const errors = validationResult(req);
     if (errors.isEmpty()) {
@@ -39,5 +56,6 @@ const validate = (req, res, next) => {
 module.exports = {
     registerRules,
     loginRules,
+    changePasswordRules,
     validate
 };

@@ -23,7 +23,7 @@ export const fetchPopularMovies = async () => {
 };
 
 export const fetchMoviesDetailsById = async (id) => {
-  const url = `https://api.themoviedb.org/3/movie/${id}?language=pt-BR`;
+  const url = `https://api.themoviedb.org/3/movie/${id}?api_key=${TMDB_API_KEY}&language=pt-BR`;
   try {
     const response = await axios.get(url, options);
     return response.data;
