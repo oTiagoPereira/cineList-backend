@@ -237,3 +237,26 @@ exports.changePassword = async (req, res) => {
     });
   }
 };
+
+exports.getMe = (req, res) => {
+  const token = req.cookies?.auth_token;
+  if (!token) {
+    return res.status(401).json({ error: "Não autenticado" });
+  }
+
+  try {
+    const user = jwt.verify(token, process.env.JWT_SECRET);
+    res.json({ user });
+  } catch (err) {
+    res.status(401).json({ error: "Token inválido" });
+  }
+};
+
+exports.logout = (req, res) => {
+  res.clearCookie("auth_token", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none"
+  });
+  res.json({ message: "Logout realizado com sucesso" });
+};

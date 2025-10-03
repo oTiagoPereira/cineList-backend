@@ -16,12 +16,8 @@ const app = express();
 connectDB();
 
 app.use(cors({
-  origin: [
-    process.env.CLIENT_URL,
-    process.env.CLIENT_URL + '/',
-    'http://localhost:3030',
-    'http://localhost:3030/'
-  ],
+  origin: process.env.CLIENT_URL,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 }));
 app.use(express.json());

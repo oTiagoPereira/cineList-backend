@@ -31,4 +31,9 @@ router.get('/google/callback',
 
 router.get('/login/failed', authController.googleLoginFailed);
 
+router.get("/me", authController.getMe);
+
+router.post("/logout", authController.logout);
+
+
 module.exports = router;
