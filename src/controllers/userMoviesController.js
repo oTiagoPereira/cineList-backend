@@ -1,5 +1,3 @@
-const axios = require("axios");
-const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const { PrismaClient } = require("../generated/prisma/index");
 const { fetchMoviesDetailsById } = require("../services/moviesService");
 const prisma = new PrismaClient();
@@ -28,22 +26,39 @@ exports.favoriteMovie = async (req, res) => {
     const user = req.user;
     const { movieId } = req.body;
 
-    const data = {
-      userId: user.userId,
-      movieTmdbId: Number(movieId),
-    };
-
-    const newMovie = await prisma.userMovie.create({ data });
-
-    if (!newMovie) {
-      return res.status(500).json({ message: "Erro ao salvar filme" });
+    if (!movieId) {
+      return res.status(400).json({ message: 'movieId é obrigatório' });
+    }
+    const movieTmdbId = Number(movieId);
+    if (isNaN(movieTmdbId)) {
+      return res.status(400).json({ message: 'movieId inválido' });
     }
 
-    res.status(200).json({ message: "Filme salvo com sucesso!", saved: true });
+    const userId = user.userId || user.id;
+
+    const existing = await prisma.userMovie.findUnique({
+      where: {
+        userId_movieTmdbId: {
+          userId: userId,
+          movieTmdbId: movieTmdbId
+        }
+      }
+    });
+    if (existing) {
+      return res.status(200).json({ message: 'Filme já estava salvo', saved: true, duplicate: true });
+    }
+
+    await prisma.userMovie.create({
+      data: { userId, movieTmdbId }
+    });
+
+    return res.status(201).json({ message: 'Filme salvo com sucesso!', saved: true });
   } catch (error) {
-    res
-      .status(500)
-      .json({ error: error.message, message: "Erro ao salvar o filme" });
+    if (error.code === 'P2002') { // unique constraint
+      return res.status(200).json({ message: 'Filme já estava salvo', saved: true, duplicate: true });
+    }
+    console.error('Erro ao salvar filme:', error);
+    return res.status(500).json({ error: error.message, message: 'Erro ao salvar o filme' });
   }
 };
 
@@ -89,38 +104,26 @@ exports.toggleWatched = async (req, res) => {
       return res.status(400).json({ message: "movieId inválido" });
     }
 
-    // Busca primeiro o filme
     const existing = await prisma.userMovie.findUnique({
-      where: {
-        userId_movieTmdbId: {
-          userId: userId,
-          movieTmdbId: movieTmdbId,
-        },
-      },
+      where: { userId_movieTmdbId: { userId, movieTmdbId } }
     });
-
     if (!existing) {
       return res.status(404).json({ message: "Filme não encontrado" });
     }
 
-    const movie = await prisma.userMovie.update({
-      where: {
-        userId_movieTmdbId: {
-          userId: userId,
-          movieTmdbId: movieTmdbId,
-        },
-      },
-      data: {
-        watched: !existing.watched,
-      },
+    const updated = await prisma.userMovie.update({
+      where: { userId_movieTmdbId: { userId, movieTmdbId } },
+      data: { watched: !existing.watched }
     });
 
-    res.status(200).json({ message: "Filme alterado com sucesso!", movie });
+    return res.status(200).json({
+      message: 'Status de watched atualizado',
+      saved: true,
+      watched: updated.watched
+    });
   } catch (error) {
     console.error(error);
-    res
-      .status(500)
-      .json({ error: error.message, message: "Erro ao alterar o filme" });
+    return res.status(500).json({ error: error.message, message: 'Erro ao alterar o filme' });
   }
 };
 

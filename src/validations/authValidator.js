@@ -3,6 +3,11 @@ const { body, validationResult } = require('express-validator');
 // Regras de validação para o registro
 const registerRules = () => {
     return [
+        body('name')
+            .notEmpty()
+            .withMessage('Nome é obrigatório.')
+            .isLength({ min: 2 })
+            .withMessage('Nome deve ter pelo menos 2 caracteres.'),
         body('email')
             .isEmail()
             .withMessage('Por favor, forneça um email válido.')

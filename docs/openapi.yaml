@@ -1,0 +1,335 @@
+openapi: 3.0.3
+info:
+  title: CineList API
+  version: 1.0.0
+  description: |
+    API do backend CineList.
+
+    Fluxos principais:
+      - Autenticação (credenciais + Google OAuth)
+      - Busca e detalhes de filmes via TMDB (proxy)
+      - Lista pessoal de filmes (favoritos / assistidos)
+      - Recomendações baseadas em preferências
+servers:
+  - url: http://localhost:5000/api
+    description: Ambiente local
+  - url: https://cinelist-backend.onrender.com/api
+    description: Produção
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: auth_token
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    UserPublic:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        googleId:
+          type: string
+          nullable: true
+    AuthLoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        userId:
+          type: string
+        user:
+          $ref: "#/components/schemas/UserPublic"
+    MovieStatus:
+      type: object
+      properties:
+        saved:
+          type: boolean
+        watched:
+          type: boolean
+    RecommendationRequest:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [single, couple]
+        preferences:
+          type: object
+          properties:
+            user1:
+              type: object
+            user2:
+              type: object
+security:
+  - cookieAuth: []
+paths:
+  /auth/register:
+    post:
+      summary: Registrar novo usuário
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 6 }
+      responses:
+        "201": { description: Usuário criado }
+        "409": { description: Usuário já existe }
+  /auth/login:
+    post:
+      summary: Login com email e senha
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthLoginResponse"
+        "401": { description: Falha de autenticação }
+  /auth/change-password:
+    post:
+      security: [{ cookieAuth: [] }]
+      summary: Alterar senha do usuário autenticado
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string }
+      responses:
+        "200": { description: Senha alterada }
+        "400": { description: Dados inválidos }
+        "401": { description: Não autenticado }
+  /auth/me:
+    get:
+      summary: Retorna dados do usuário via cookie ou bearer
+      tags: [Auth]
+      responses:
+        "200": { description: OK }
+        "401": { description: Não autenticado }
+  /auth/logout:
+    post:
+      summary: Logout e limpeza de cookies
+      tags: [Auth]
+      responses:
+        "200": { description: OK }
+  /auth/forgot-password:
+    post:
+      summary: Solicitar reset de senha
+      tags: [Auth]
+      description: |
+        Sempre retorna mensagem genérica independente do email existir.
+        Em ambiente de desenvolvimento pode retornar `resetLink` para facilitar testes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200": { description: Resposta genérica independente de email existir }
+        "400": { description: Requisição inválida }
+  /auth/reset-password:
+    post:
+      summary: Redefinir senha usando token
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, token, password]
+              properties:
+                email: { type: string, format: email }
+                token: { type: string }
+                password: { type: string, minLength: 6 }
+      responses:
+        "200": { description: Senha redefinida }
+        "400": { description: Token inválido ou expirado }
+        "500": { description: Erro interno }
+  /movies/populares:
+    get:
+      summary: Lista filmes populares (TMDB)
+      tags: [Movies]
+      responses:
+        "200": { description: OK }
+  /movies/details/{id}:
+    get:
+      summary: Detalhes de um filme
+      tags: [Movies]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: string }
+          required: true
+      responses:
+        "200": { description: OK }
+  /movies/streaming/{id}:
+    get:
+      summary: Opções de streaming
+      tags: [Movies]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /movies/similar/{id}:
+    get:
+      summary: Filmes similares
+      tags: [Movies]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /movies/genres:
+    get:
+      summary: Lista gêneros
+      tags: [Movies]
+      responses:
+        "200": { description: OK }
+  /movies/top-rated:
+    get:
+      summary: Filmes mais bem avaliados
+      tags: [Movies]
+      responses:
+        "200": { description: OK }
+  /movies/search/{query}:
+    get:
+      summary: Buscar filmes por texto
+      tags: [Movies]
+      parameters:
+        - in: path
+          name: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /user/movies:
+    post:
+      security: [{ cookieAuth: [] }]
+      summary: Salvar filme do usuário
+      tags: [UserMovies]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [movieId]
+              properties:
+                movieId: { type: integer }
+      responses:
+        "201": { description: Filme salvo }
+        "200": { description: Já existia }
+    get:
+      security: [{ cookieAuth: [] }]
+      summary: Listar filmes salvos (IDs)
+      tags: [UserMovies]
+      responses:
+        "200": { description: OK }
+  /user/movies/details:
+    get:
+      security: [{ cookieAuth: [] }]
+      summary: Listar detalhes dos filmes salvos
+      tags: [UserMovies]
+      responses:
+        "200": { description: OK }
+  /user/movies/{id}:
+    delete:
+      security: [{ cookieAuth: [] }]
+      summary: Remover filme salvo
+      tags: [UserMovies]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: Removido }
+    patch:
+      security: [{ cookieAuth: [] }]
+      summary: Alternar assistido
+      tags: [UserMovies]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Status atualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  saved: { type: boolean }
+                  watched: { type: boolean }
+  /user/movies/{id}/status:
+    get:
+      security: [{ cookieAuth: [] }]
+      summary: Status salvo/assistido
+      tags: [UserMovies]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MovieStatus"
+  /recommendation:
+    post:
+      summary: Gerar recomendações
+      tags: [Recommendation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecommendationRequest"
+      responses:
+        "200": { description: OK }
+        "400": { description: Requisição inválida }

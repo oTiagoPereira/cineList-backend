@@ -1,7 +1,9 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const { PrismaClient } = require("../generated/prisma/index");
 const prisma = new PrismaClient();
+const { sendPasswordResetEmail } = require('../config/mailer');
 
 // Função auxiliar para limpar URLs
 const cleanUrl = (baseUrl, path) => {
@@ -12,29 +14,33 @@ const cleanUrl = (baseUrl, path) => {
 
 exports.register = async (req, res) => {
   try {
-
     const { name, email, password } = req.body;
 
-    const existingUser = await prisma.user.findUnique({ where: { email: email } });
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "Nome, email e senha são obrigatórios" });
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
-      return res.status(409).json({ message: "Usuario ja cadastrado" });
+      return res.status(409).json({ message: "Usuário já cadastrado" });
     }
 
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const data = {
-      name: name,
-      email: email,
-      password: hashedPassword,
-    }
+    const newUser = await prisma.user.create({
+      data: { name, email, password: hashedPassword }
+    });
 
-    const newUser = await prisma.user.create({ data });
-    delete newUser.password
+    const userResponse = { id: newUser.id, name: newUser.name, email: newUser.email };
 
-    res.status(201).json({ message: "Usuario cadastrado com sucesso", newUser });
+    return res.status(201).json({
+      message: "Usuário cadastrado com sucesso. Faça login para continuar.",
+      user: userResponse
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Erro no registro:", error);
+    return res.status(500).json({ error: error.message || 'Erro interno' });
   }
 };
 
@@ -57,9 +63,7 @@ exports.login = async (req, res) => {
       userId: user.id,
       email: user.email,
       name: user.name
-    }, process.env.JWT_SECRET, {
-      expiresIn: "1d", // Aumentei para 1 dia para consistência
-    });
+    }, process.env.JWT_SECRET, { expiresIn: "1d" });
 
     // Remover senha dos dados do usuário antes de enviar
     const userWithoutPassword = {
@@ -70,21 +74,18 @@ exports.login = async (req, res) => {
     };
 
     // Definir cookies seguros
-    const cookieOptions = {
-      httpOnly: false, // Precisa ser false para permitir leitura no frontend
+    const baseCookieOptions = {
+      httpOnly: true, // segurança: não acessível via JS
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       maxAge: 24 * 60 * 60 * 1000 // 24 horas
     };
 
-    // Definir cookie do token
-    res.cookie('auth_token', token, cookieOptions);
+    res.cookie('auth_token', token, baseCookieOptions);
 
-    // Definir cookie dos dados do usuário
-    res.cookie('user_data', JSON.stringify(userWithoutPassword), cookieOptions);
-
-    // Definir cookie do user_id para fácil acesso
-    res.cookie('user_id', user.id.toString(), cookieOptions);
+    const readableCookieOptions = { ...baseCookieOptions, httpOnly: false };
+    res.cookie('user_data', JSON.stringify(userWithoutPassword), readableCookieOptions);
+    res.cookie('user_id', user.id.toString(), readableCookieOptions);
 
     res.status(200).json({
       token,
@@ -104,16 +105,10 @@ exports.googleAuth = (req, res, next) => {
 
 exports.googleCallback = (req, res) => {
   try {
-    // Verificar se o usuário foi autenticado
     if (!req.user) {
-      console.log('Usuário não autenticado no callback do Google');
       return res.redirect(cleanUrl(process.env.CLIENT_URL, 'login?error=authentication_failed'));
     }
 
-    // Usuário autenticado com sucesso! `req.user` contém os dados do banco.
-    console.log('Usuário autenticado com sucesso:', req.user.email);
-
-    // Crie o token JWT (padronizado com o login normal)
     const token = jwt.sign(
       {
         userId: req.user.id,
@@ -133,23 +128,18 @@ exports.googleCallback = (req, res) => {
     };
 
     // Definir cookies seguros
-    const cookieOptions = {
-      httpOnly: false, // Precisa ser false para permitir leitura no frontend
+    const baseCookieOptions = {
+      httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000 // 24 horas
+      maxAge: 24 * 60 * 60 * 1000
     };
+    const readableCookieOptions = { ...baseCookieOptions, httpOnly: false };
 
-    // Definir cookie do token
-    res.cookie('auth_token', token, cookieOptions);
+    res.cookie('auth_token', token, baseCookieOptions);
+    res.cookie('user_data', JSON.stringify(userWithoutPassword), readableCookieOptions);
+    res.cookie('user_id', req.user.id.toString(), readableCookieOptions);
 
-    // Definir cookie dos dados do usuário
-    res.cookie('user_data', JSON.stringify(userWithoutPassword), cookieOptions);
-
-    // Definir cookie do user_id para fácil acesso
-    res.cookie('user_id', req.user.id.toString(), cookieOptions);
-
-    // Redirecione de volta para o frontend
     res.redirect(cleanUrl(process.env.CLIENT_URL, `auth/success`));
   } catch (error) {
     console.error('Erro no callback do Google:', error);
@@ -158,7 +148,6 @@ exports.googleCallback = (req, res) => {
 };
 
 exports.googleLoginFailed = (req, res) => {
-  console.log('Falha na autenticação Google OAuth');
   res.status(401).json({
     success: false,
     message: 'Falha na autenticação com Google. Tente novamente.',
@@ -239,24 +228,134 @@ exports.changePassword = async (req, res) => {
 };
 
 exports.getMe = (req, res) => {
-  const token = req.cookies?.auth_token;
+  // Prioriza cookie httpOnly
+  let token = req.cookies?.auth_token;
+  // Fallback para Authorization Bearer
+  if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
   if (!token) {
     return res.status(401).json({ error: "Não autenticado" });
   }
-
   try {
-    const user = jwt.verify(token, process.env.JWT_SECRET);
-    res.json({ user });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = { id: decoded.userId || decoded.id, email: decoded.email, name: decoded.name };
+    return res.json({ user });
   } catch (err) {
-    res.status(401).json({ error: "Token inválido" });
+    return res.status(401).json({ error: "Token inválido" });
   }
 };
 
 exports.logout = (req, res) => {
-  res.clearCookie("auth_token", {
+  const cookieBase = {
     httpOnly: true,
-    secure: true,
-    sameSite: "none"
-  });
-  res.json({ message: "Logout realizado com sucesso" });
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict'
+  };
+  res.clearCookie('auth_token', cookieBase);
+  res.clearCookie('user_data', { ...cookieBase, httpOnly: false });
+  res.clearCookie('user_id', { ...cookieBase, httpOnly: false });
+  return res.json({ message: 'Logout realizado com sucesso' });
+};
+
+// Solicitar reset de senha
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: 'Email é obrigatório' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    // Resposta genérica para evitar enumeração de usuários
+    if (!user) {
+      return res.status(200).json({ message: 'Se o email existir enviaremos instruções de reset' });
+    }
+
+    // Invalidar tokens antigos (opcional: marcar como usados). Aqui apenas deixamos expirar.
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = await bcrypt.hash(rawToken, 10);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1h
+
+    await prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt
+      }
+    });
+
+    const baseUrl = process.env.CLIENT_URL?.replace(/\/$/, '');
+    const resetLink = `${baseUrl}/resetar-senha?token=${rawToken}&email=${encodeURIComponent(email)}`;
+
+    try {
+      await sendPasswordResetEmail(email, resetLink);
+    } catch (mailErr) {
+      console.error('Falha ao enviar email de reset:', mailErr);
+    }
+
+    return res.status(200).json({
+      message: 'Se o email existir enviaremos instruções de reset',
+      resetLink: process.env.NODE_ENV === 'development' ? resetLink : undefined
+    });
+  } catch (error) {
+    console.error('Erro forgotPassword:', error);
+    return res.status(500).json({ message: 'Erro interno', error: error.message });
+  }
+};
+
+// Resetar senha com token
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, token, password } = req.body;
+    if (!email || !token || !password) {
+      return res.status(400).json({ message: 'Email, token e nova senha são obrigatórios' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ message: 'Senha deve ter ao menos 6 caracteres' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.status(400).json({ message: 'Token inválido ou expirado' });
+    }
+
+    // Buscar tokens não usados e não expirados
+    const tokens = await prisma.passwordResetToken.findMany({
+      where: {
+        userId: user.id,
+        used: false,
+        expiresAt: { gt: new Date() }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 5
+    });
+
+    let validToken = null;
+    for (const t of tokens) {
+      const match = await bcrypt.compare(token, t.tokenHash);
+      if (match) {
+        validToken = t;
+        break;
+      }
+    }
+
+    if (!validToken) {
+      return res.status(400).json({ message: 'Token inválido ou expirado' });
+    }
+
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: user.id }, data: { password: hashedPassword } }),
+      prisma.passwordResetToken.update({ where: { id: validToken.id }, data: { used: true } })
+    ]);
+
+    return res.json({ message: 'Senha redefinida com sucesso' });
+  } catch (error) {
+    console.error('Erro resetPassword:', error);
+    return res.status(500).json({ message: 'Erro interno', error: error.message });
+  }
 };

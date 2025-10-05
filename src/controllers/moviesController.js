@@ -66,7 +66,7 @@ exports.getMoviesSimilar = async (req, res) => {
 
 exports.getGenres = async (req, res) => {
   try {
-    const genres = await fetchGenres(); // Você precisará criar essa função no seu serviço
+    const genres = await fetchGenres(); 
     res.status(200).json(genres);
   } catch (error) {
     console.error("Erro ao buscar gêneros:", error);
@@ -88,7 +88,6 @@ exports.getTopRated = async (req, res) => {
 
 exports.getSearchMovies = async (req, res) => {
   try {
-    // A rota foi definida como /search/:query então usamos params
     const { query } = req.params;
 
     if (!query || !query.trim()) {
