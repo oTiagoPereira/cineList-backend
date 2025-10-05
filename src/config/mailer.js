@@ -11,7 +11,7 @@ function createEmailService() {
 const resend = createEmailService();
 
 async function sendPasswordResetEmail(to, resetLink) {
-  const appName = process.env.APP_NAME;
+  const appName = process.env.APP_NAME || "CineList";
   const from = process.env.MAIL_FROM;
   const subject = `${appName} - Redefinição de Senha`;
   const html = `
@@ -29,14 +29,12 @@ async function sendPasswordResetEmail(to, resetLink) {
   `;
 
   try {
-    console.log(`[MAILER] Tentando enviar email para: ${to}`);
     const result = await resend.emails.send({
       from,
       to: [to],
       subject,
       html
     });
-    console.log('[MAILER] Email enviado com sucesso:', result.data || result);
     return result;
   } catch (error) {
     console.error('[MAILER] Erro ao enviar email:', error);

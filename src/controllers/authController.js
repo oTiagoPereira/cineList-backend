@@ -75,10 +75,10 @@ exports.login = async (req, res) => {
 
     // Definir cookies seguros
     const baseCookieOptions = {
-      httpOnly: true, // segurança: não acessível via JS
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000 // 24 horas
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 24 * 60 * 60 * 1000
     };
 
     res.cookie('auth_token', token, baseCookieOptions);
@@ -130,8 +130,9 @@ exports.googleCallback = (req, res) => {
     // Definir cookies seguros
     const baseCookieOptions = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: true,
+      sameSite: 'lax',
+      domain: process.env.COOKIE_DOMAIN || 'cinelistweb.vercel.app',
       maxAge: 24 * 60 * 60 * 1000
     };
     const readableCookieOptions = { ...baseCookieOptions, httpOnly: false };
