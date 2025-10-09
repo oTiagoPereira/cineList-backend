@@ -31,7 +31,7 @@ router.get('/google/callback',
 
 router.get('/login/failed', authController.googleLoginFailed);
 
-router.get("/me", authController.getMe);
+router.get("/me", authCookieMiddleware, authController.getMe);
 
 router.post("/logout", authController.logout);
 

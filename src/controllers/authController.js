@@ -131,8 +131,7 @@ exports.googleCallback = (req, res) => {
     const baseCookieOptions = {
       httpOnly: true,
       secure: true,
-      sameSite: 'lax',
-      domain: process.env.COOKIE_DOMAIN || 'cinelistweb.vercel.app',
+      sameSite: 'none',
       maxAge: 24 * 60 * 60 * 1000
     };
     const readableCookieOptions = { ...baseCookieOptions, httpOnly: false };
