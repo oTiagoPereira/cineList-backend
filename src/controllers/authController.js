@@ -5,13 +5,6 @@ const { PrismaClient } = require("../generated/prisma/index");
 const prisma = new PrismaClient();
 const { sendPasswordResetEmail } = require('../config/mailer');
 
-// Função auxiliar para limpar URLs
-const cleanUrl = (baseUrl, path) => {
-  const cleanBase = baseUrl.replace(/\/+$/, ''); // Remove barras no final
-  const cleanPath = path.replace(/^\/+/, ''); // Remove barras no início
-  return `${cleanBase}/${cleanPath}`;
-};
-
 exports.register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -60,36 +53,28 @@ exports.login = async (req, res) => {
     }
 
     const token = jwt.sign({
-      userId: user.id,
+      id: user.id,
       email: user.email,
       name: user.name
     }, process.env.JWT_SECRET, { expiresIn: "1d" });
+
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
+      maxAge: 24 * 60 * 60 * 1000 // 1 dia
+    };
+
+    res.cookie('auth_token', token, cookieOptions);
 
     // Remover senha dos dados do usuário antes de enviar
     const userWithoutPassword = {
       id: user.id,
       name: user.name,
       email: user.email,
-      googleId: user.googleId
     };
-
-    // Definir cookies seguros
-    const baseCookieOptions = {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      maxAge: 24 * 60 * 60 * 1000
-    };
-
-    res.cookie('auth_token', token, baseCookieOptions);
-
-    const readableCookieOptions = { ...baseCookieOptions, httpOnly: false };
-    res.cookie('user_data', JSON.stringify(userWithoutPassword), readableCookieOptions);
-    res.cookie('user_id', user.id.toString(), readableCookieOptions);
 
     res.status(200).json({
-      token,
-      userId: user.id,
       user: userWithoutPassword
     });
   } catch (error) {
@@ -97,62 +82,29 @@ exports.login = async (req, res) => {
   }
 };
 
-// Google OAuth Controllers
-exports.googleAuth = (req, res, next) => {
-  // Esta função será executada pelo passport.authenticate
-  // Não precisa de lógica aqui, o Passport cuida da autenticação
-};
-
+// Controller para o callback do Google
 exports.googleCallback = (req, res) => {
-  try {
-    if (!req.user) {
-      return res.redirect(cleanUrl(process.env.CLIENT_URL, 'login?error=authentication_failed'));
-    }
-
-    const token = jwt.sign(
-      {
-        userId: req.user.id,
-        email: req.user.email,
-        name: req.user.name
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '1d' } // Token expira em 1 dia
-    );
-
-    // Dados do usuário para os cookies
-    const userWithoutPassword = {
-      id: req.user.id,
-      name: req.user.name,
-      email: req.user.email,
-      googleId: req.user.googleId
-    };
-
-    // Definir cookies seguros
-    const baseCookieOptions = {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      maxAge: 24 * 60 * 60 * 1000
-    };
-    const readableCookieOptions = { ...baseCookieOptions, httpOnly: false };
-
-    res.cookie('auth_token', token, baseCookieOptions);
-    res.cookie('user_data', JSON.stringify(userWithoutPassword), readableCookieOptions);
-    res.cookie('user_id', req.user.id.toString(), readableCookieOptions);
-
-    res.redirect(cleanUrl(process.env.CLIENT_URL, `auth/success`));
-  } catch (error) {
-    console.error('Erro no callback do Google:', error);
-    res.redirect(cleanUrl(process.env.CLIENT_URL, 'login?error=callback_error'));
+  if (!req.user) {
+    return res.redirect(`${process.env.CLIENT_URL}/login?error=auth_failed`);
   }
-};
 
-exports.googleLoginFailed = (req, res) => {
-  res.status(401).json({
-    success: false,
-    message: 'Falha na autenticação com Google. Tente novamente.',
-    error: 'google_auth_failed'
-  });
+  const user = req.user;
+  const token = jwt.sign({
+    id: user.id,
+    email: user.email,
+    name: user.name
+  }, process.env.JWT_SECRET, { expiresIn: "1d" });
+
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
+    maxAge: 24 * 60 * 60 * 1000
+  };
+
+  res.cookie('auth_token', token, cookieOptions);
+
+  res.redirect(`${process.env.CLIENT_URL}/auth/success`);
 };
 
 // Alterar senha do usuário
@@ -175,7 +127,7 @@ exports.changePassword = async (req, res) => {
     }
 
     // Obter ID do usuário do token JWT fornecido pelo middleware
-    const userId = req.user?.id || req.user?.userId;
+    const userId = req.user.id;
 
     if (!userId) {
       return res.status(401).json({ message: "Token de autenticação necessário" });
@@ -228,33 +180,22 @@ exports.changePassword = async (req, res) => {
 };
 
 exports.getMe = (req, res) => {
-  // Prioriza cookie httpOnly
-  let token = req.cookies?.auth_token;
-  // Fallback para Authorization Bearer
-  if (!token && req.headers.authorization?.startsWith('Bearer ')) {
-    token = req.headers.authorization.split(' ')[1];
-  }
-  if (!token) {
+  // O middleware de autenticação já validou o token e anexou os dados do usuário a req.user
+  if (!req.user) {
     return res.status(401).json({ error: "Não autenticado" });
   }
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = { id: decoded.userId || decoded.id, email: decoded.email, name: decoded.name };
-    return res.json({ user });
-  } catch (err) {
-    return res.status(401).json({ error: "Token inválido" });
-  }
+  // Retorna os dados do usuário obtidos do token
+  return res.json({ user: req.user });
 };
 
 exports.logout = (req, res) => {
-  const cookieBase = {
+  const cookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict'
+    sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
+    expires: new Date(0) // Expira o cookie imediatamente
   };
-  res.clearCookie('auth_token', cookieBase);
-  res.clearCookie('user_data', { ...cookieBase, httpOnly: false });
-  res.clearCookie('user_id', { ...cookieBase, httpOnly: false });
+  res.cookie('auth_token', '', cookieOptions);
   return res.json({ message: 'Logout realizado com sucesso' });
 };
 

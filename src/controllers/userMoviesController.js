@@ -7,7 +7,7 @@ exports.listUserMovies = async (req, res) => {
     const user = req.user;
 
     const movies = await prisma.userMovie.findMany({
-      where: { userId: user.userId },
+      where: { userId: user.id },
     });
 
     if (!movies) {
@@ -34,7 +34,7 @@ exports.favoriteMovie = async (req, res) => {
       return res.status(400).json({ message: 'movieId inválido' });
     }
 
-    const userId = user.userId || user.id;
+    const userId = user.id;
 
     const existing = await prisma.userMovie.findUnique({
       where: {
@@ -65,7 +65,7 @@ exports.favoriteMovie = async (req, res) => {
 exports.deleteMovie = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user.userId;
+    const userId = req.user.id;
 
     const movieTmdbId = Number(id);
     if (isNaN(movieTmdbId)) {
@@ -97,7 +97,7 @@ exports.deleteMovie = async (req, res) => {
 exports.toggleWatched = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user.userId;
+    const userId = req.user.id;
 
     const movieTmdbId = Number(id);
     if (isNaN(movieTmdbId)) {
@@ -130,7 +130,7 @@ exports.toggleWatched = async (req, res) => {
 exports.movieStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user.userId;
+    const userId = req.user.id;
 
     const movieTmdbId = Number(id);
     if (isNaN(movieTmdbId)) {
@@ -162,7 +162,7 @@ exports.listUserMoviesDetails = async (req, res) => {
   try {
     const user = req.user;
     const movies = await prisma.userMovie.findMany({
-      where: { userId: user.userId },
+      where: { userId: user.id },
     });
 
     if (!movies || movies.length === 0) {
