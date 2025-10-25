@@ -58,15 +58,6 @@ exports.login = async (req, res) => {
       name: user.name
     }, process.env.JWT_SECRET, { expiresIn: "1d" });
 
-    const cookieOptions = {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
-      maxAge: 24 * 60 * 60 * 1000 // 1 dia
-    };
-
-    res.cookie('auth_token', token, cookieOptions);
-
     // Remover senha dos dados do usuário antes de enviar
     const userWithoutPassword = {
       id: user.id,
@@ -75,6 +66,7 @@ exports.login = async (req, res) => {
     };
 
     res.status(200).json({
+      token: token,
       user: userWithoutPassword
     });
   } catch (error) {
@@ -95,16 +87,8 @@ exports.googleCallback = (req, res) => {
     name: user.name
   }, process.env.JWT_SECRET, { expiresIn: "1d" });
 
-  const cookieOptions = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
-    maxAge: 24 * 60 * 60 * 1000
-  };
-
-  res.cookie('auth_token', token, cookieOptions);
-
-  res.redirect(`${process.env.CLIENT_URL}/auth/success`);
+  // Redireciona para o frontend com o token na URL
+  res.redirect(`${process.env.CLIENT_URL}/auth/success?token=${token}`);
 };
 
 // Alterar senha do usuário
@@ -189,13 +173,6 @@ exports.getMe = (req, res) => {
 };
 
 exports.logout = (req, res) => {
-  const cookieOptions = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
-    expires: new Date(0) // Expira o cookie imediatamente
-  };
-  res.cookie('auth_token', '', cookieOptions);
   return res.json({ message: 'Logout realizado com sucesso' });
 };
 
