@@ -1,4 +1,4 @@
-import axios from "axios";
+const axios = require("axios");
 
 const TMDB_API_AUTH = process.env.TMDB_API_AUTH;
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
@@ -10,9 +10,9 @@ const options = {
   },
 };
 
-export const fetchPopularMovies = async () => {
+const fetchPopularMovies = async (page = 1) => {
   const url =
-    "https://api.themoviedb.org/3/movie/popular?language=pt-BR&page=1";
+    `https://api.themoviedb.org/3/movie/popular?language=pt-BR&page=${page}`;
 
   try {
     const response = await axios.get(url, options);
@@ -22,8 +22,8 @@ export const fetchPopularMovies = async () => {
   }
 };
 
-export const fetchMoviesDetailsById = async (id) => {
-  const url = `https://api.themoviedb.org/3/movie/${id}?api_key=${TMDB_API_KEY}&language=pt-BR`;
+const fetchMoviesDetailsById = async (id) => {
+  const url = `https://api.themoviedb.org/3/movie/${id}?api_key=${TMDB_API_KEY}&language=pt-BR&append_to_response=credits,videos`;
   try {
     const response = await axios.get(url, options);
     return response.data;
@@ -32,7 +32,7 @@ export const fetchMoviesDetailsById = async (id) => {
   }
 };
 
-export const fetchStreamingOptions = async (id) => {
+const fetchStreamingOptions = async (id) => {
   const url = `https://api.themoviedb.org/3/movie/${id}/watch/providers?language=pt-BR`;
   try {
     const response = await axios.get(url, options);
@@ -42,7 +42,7 @@ export const fetchStreamingOptions = async (id) => {
   }
 };
 
-export const fetchMoviesSimilar = async (id) => {
+const fetchMoviesSimilar = async (id) => {
   const url = `https://api.themoviedb.org/3/movie/${id}/similar?language=pt-BR&page=1`;
   try {
     const response = await axios.get(url, options);
@@ -52,7 +52,7 @@ export const fetchMoviesSimilar = async (id) => {
   }
 };
 
-export const fetchGenres = async () => {
+const fetchGenres = async () => {
   const url = `https://api.themoviedb.org/3/genre/movie/list?api_key=${TMDB_API_KEY}&language=pt-BR`;
   try {
     const response = await axios.get(url);
@@ -62,8 +62,8 @@ export const fetchGenres = async () => {
   }
 };
 
-export const fetchTopRated = async () => {
-  const url = `https://api.themoviedb.org/3/movie/top_rated?language=pt-BR&page=1`;
+const fetchTopRated = async (page = 1) => {
+  const url = `https://api.themoviedb.org/3/movie/top_rated?language=pt-BR&page=${page}`;
   try {
     const response = await axios.get(url, options);
     return response.data;
@@ -72,7 +72,7 @@ export const fetchTopRated = async () => {
   }
 };
 
-export const searchMovies = async (query) => {
+const searchMovies = async (query) => {
   if (!query || query.trim() === "") {
     throw new Error("O parâmetro 'query' está vazio ou indefinido!");
   }
@@ -87,4 +87,25 @@ export const searchMovies = async (query) => {
   } catch (error) {
     console.error("Erro na busca:", error.response?.data || error.message);
   }
+};
+
+const fetchMoviesByGenre = async (genreId, page = 1) => {
+  const url = `https://api.themoviedb.org/3/discover/movie?with_genres=${genreId}&language=pt-BR&page=${page}`;
+  try {
+    const response = await axios.get(url, options);
+    return response.data;
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+module.exports = {
+  fetchPopularMovies,
+  fetchMoviesDetailsById,
+  fetchStreamingOptions,
+  fetchMoviesSimilar,
+  fetchGenres,
+  fetchTopRated,
+  searchMovies,
+  fetchMoviesByGenre
 };

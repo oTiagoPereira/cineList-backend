@@ -6,13 +6,15 @@ const {
   fetchGenres,
   fetchTopRated,
   searchMovies,
+  fetchMoviesByGenre,
 } = require("../services/moviesService");
 const { PrismaClient } = require("../generated/prisma/index");
 const prisma = new PrismaClient();
 
 exports.getMoviesPopulares = async (req, res) => {
   try {
-    const movies = await fetchPopularMovies();
+    const { page } = req.query;
+    const movies = await fetchPopularMovies(page);
     res.status(200).json(movies);
   } catch (error) {
     res.status(500).json({
@@ -66,7 +68,7 @@ exports.getMoviesSimilar = async (req, res) => {
 
 exports.getGenres = async (req, res) => {
   try {
-    const genres = await fetchGenres(); 
+    const genres = await fetchGenres();
     res.status(200).json(genres);
   } catch (error) {
     console.error("Erro ao buscar gêneros:", error);
@@ -76,11 +78,26 @@ exports.getGenres = async (req, res) => {
 
 exports.getTopRated = async (req, res) => {
   try {
-    const movies = await fetchTopRated();
+    const { page } = req.query;
+    const movies = await fetchTopRated(page);
     res.status(200).json(movies);
   } catch (error) {
     res.status(500).json({
       message: "Erro ao buscar filmes mais avaliados",
+      error: error.message,
+    });
+  }
+};
+
+exports.getMoviesByGenre = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { page } = req.query;
+    const movies = await fetchMoviesByGenre(id, page);
+    res.status(200).json(movies);
+  } catch (error) {
+    res.status(500).json({
+      message: "Erro ao buscar filmes por gênero",
       error: error.message,
     });
   }

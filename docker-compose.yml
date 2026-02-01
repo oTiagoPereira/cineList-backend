@@ -1,0 +1,34 @@
+services:
+  # Backend Node.js
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cinelist_backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: "file:/app/prisma/dev.db"
+      JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL}
+      CLIENT_URL: ${CLIENT_URL}
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 5000
+      TMDB_API_KEY: ${TMDB_API_KEY}
+      TMDB_API_AUTH: ${TMDB_API_AUTH}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      MAIL_FROM: ${MAIL_FROM:-CineList <onboarding@resend.dev>}
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - cinelist_network
+    command: sh -c "npx prisma migrate deploy && npm start"
+
+networks:
+  cinelist_network:
+    driver: bridge
