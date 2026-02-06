@@ -8,7 +8,7 @@ const {
   searchMovies,
   fetchMoviesByGenre,
 } = require("../services/moviesService");
-const { PrismaClient } = require("../generated/prisma/index");
+const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 exports.getMoviesPopulares = async (req, res) => {

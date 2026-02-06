@@ -1,7 +1,7 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const { PrismaClient } = require("../generated/prisma/index");
+const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const { sendPasswordResetEmail } = require('../config/mailer');
 
@@ -33,7 +33,7 @@ exports.register = async (req, res) => {
     });
   } catch (error) {
     console.error("Erro no registro:", error);
-    return res.status(500).json({ error: error.message || 'Erro interno' });
+    return res.status(500).json({ error: 'Erro interno', message: error.message });
   }
 };
 
@@ -70,7 +70,7 @@ exports.login = async (req, res) => {
       user: userWithoutPassword
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erro interno', message: error.message });
   }
 };
 

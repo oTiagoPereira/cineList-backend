@@ -1,4 +1,4 @@
-const { PrismaClient } = require("../generated/prisma/index");
+const { PrismaClient } = require("@prisma/client");
 const { fetchMoviesDetailsById } = require("../services/moviesService");
 const prisma = new PrismaClient();
 
