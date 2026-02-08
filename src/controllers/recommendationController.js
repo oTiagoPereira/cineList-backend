@@ -2,7 +2,7 @@ const axios = require("axios");
 const { searchMovies, fetchMoviesDetailsById, fetchStreamingOptions } = require("../services/moviesService.js");
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 function buildPrompt({ mode, preferences }) {
   let prompt = "Aja como um especialista em cinema. Quero 12 recomendações de filmes populares (amplamente conhecidos), sem limitar por ano. Responda em pt-BR. ";
@@ -37,6 +37,14 @@ function buildPrompt({ mode, preferences }) {
   return prompt;
 }
 
+// Função auxiliar para limpar a string JSON (remove markdown code blocks e espaços extras)
+function cleanJsonString(str) {
+  if (!str) return "";
+  // Remove marcadores de código markdown (```json ... ``` ou apenas ``` ... ```)
+  let cleaned = str.replace(/```json/g, "").replace(/```/g, "");
+  return cleaned.trim();
+}
+
 exports.getRecommendations = async (req, res) => {
   try {
     const { mode, preferences } = req.body;
@@ -55,17 +63,25 @@ exports.getRecommendations = async (req, res) => {
 
     const result = response.data;
     let jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    // Tenta limpar e parsear o JSON
     let parsedJson;
     try {
-      parsedJson = JSON.parse(jsonText);
+      const cleanedJsonText = cleanJsonString(jsonText);
+      parsedJson = JSON.parse(cleanedJsonText);
     } catch (e) {
-      return res.status(500).json({ error: 'Erro ao processar resposta da IA', details: jsonText });
+      console.error("Erro no parse do JSON da Gemini:", e, "Texto original:", jsonText);
+      return res.status(500).json({
+        error: 'O serviço gerou uma resposta inválida. Por favor, tente novamente.',
+        details: 'Falha ao interpretar a resposta.'
+      });
     }
 
-    if (parsedJson.movies && parsedJson.movies.length > 0) {
-      // Para cada título recomendado, buscar no TMDB e retornar no mesmo formato dos detalhes usados na Home
+    if (parsedJson?.movies && Array.isArray(parsedJson.movies) && parsedJson.movies.length > 0) {
       const enrichedMovies = await Promise.all(parsedJson.movies.map(async (movie) => {
         try {
+          if (!movie.title) return null;
+
           // 1) Buscar por título (não limitar por ano); usaremos popularidade para escolher
           const tmdbSearch = await searchMovies(movie.title);
           const candidates = Array.isArray(tmdbSearch?.results) ? tmdbSearch.results : [];
@@ -105,23 +121,50 @@ exports.getRecommendations = async (req, res) => {
             vote_average: details?.vote_average,
             runtime: details?.runtime,
             streaming: streamingBR,
-
           };
         } catch (err) {
+          console.error(`Erro ao enriquecer filme: ${movie.title}`, err.message);
           return null;
         }
       }));
 
       // Remover nulos (não encontrados) e retornar
       const movies = enrichedMovies.filter(Boolean);
+
       if (!movies.length) {
-        return res.status(404).json({ error: 'Nenhuma recomendação encontrada na TMDB.' });
+        return res.status(404).json({ error: 'Nenhuma das recomendações foi encontrada na nossa base de dados.' });
       }
+
       return res.status(200).json({ movies });
     } else {
-      return res.status(404).json({ error: 'Nenhuma recomendação encontrada.' });
+      return res.status(404).json({ error: 'O serviço não encontrou recomendações com os critérios informados.' });
     }
   } catch (error) {
-    return res.status(500).json({ error: error.message });
+    console.error("Erro geral no endpoint de recomendação:", error.message);
+    if (error.response) {
+      console.error("Detalhes do erro da API (Status " + error.response.status + "):", JSON.stringify(error.response.data, null, 2));
+    }
+
+    // Tratamento de erros específicos do Axios/Gemini
+    if (axios.isAxiosError(error)) {
+      if (error.response) {
+        // O servidor respondeu com um status fora do range 2xx
+        if (error.response.status === 429) {
+           return res.status(429).json({ error: 'Muitas solicitações ao serviço. Aguarde um momento e tente novamente.' });
+        }
+        if (error.response.status >= 500) {
+           return res.status(503).json({ error: 'O serviço está temporariamente indisponível.' });
+        }
+        return res.status(error.response.status).json({
+          error: 'Erro ao comunicar com o serviço.',
+          details: error.response.data
+        });
+      } else if (error.request) {
+        // A requisição foi feita mas não houve resposta
+        return res.status(503).json({ error: 'Sem resposta do serviço. Verifique sua conexão.' });
+      }
+    }
+
+    return res.status(500).json({ error: 'Ocorreu um erro interno ao processar sua solicitação.' });
   }
 };
